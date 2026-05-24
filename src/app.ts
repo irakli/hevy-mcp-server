@@ -1,10 +1,11 @@
-import { Hono } from "hono";
 import type { Context } from "hono";
-import type { Props } from "./utils.js";
+import { Hono } from "hono";
 import githubHandler from "./github-handler.js";
+import { mcpHandlers } from "./mcp-handlers.js";
 import { createMcpRoutes } from "./routes/mcp.js";
 import utilityRoutes from "./routes/utility.js";
-import { mcpHandlers } from "./mcp-handlers.js";
+import webhookRoutes from "./routes/webhook.js";
+import type { Props } from "./utils.js";
 
 // Environment interface for OAuth multi-user support
 interface Env {
@@ -15,6 +16,10 @@ interface Env {
 	COOKIE_ENCRYPTION_KEY: string;
 	// Legacy: HEVY_API_KEY is deprecated in favor of per-user keys in KV
 	HEVY_API_KEY?: string;
+	// Webhook (notification-only) reactive layer
+	HEVY_WEBHOOK_TOKEN: string;
+	NTFY_TOPIC: string;
+	COACH_USER_LOGIN: string;
 }
 
 // Variables interface for Hono context
@@ -45,8 +50,14 @@ app.use("*", async (c, next) => {
 
 	// Add CORS headers to all responses
 	c.res.headers.set("Access-Control-Allow-Origin", "*");
-	c.res.headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-	c.res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+	c.res.headers.set(
+		"Access-Control-Allow-Methods",
+		"GET, POST, DELETE, OPTIONS",
+	);
+	c.res.headers.set(
+		"Access-Control-Allow-Headers",
+		"Content-Type, Authorization",
+	);
 });
 
 // Error handling middleware
@@ -57,14 +68,15 @@ app.onError((err, c) => {
 			error: "internal_server_error",
 			message: "An unexpected error occurred",
 		},
-		500
+		500,
 	);
 });
 
 // Mount routes (order matters!)
-app.route("/", githubHandler);        // OAuth/API routes (highest priority)
-app.route("/", createMcpRoutes(mcpHandlers));  // MCP endpoints
-app.route("/", utilityRoutes);        // Health, home, etc.
+app.route("/", githubHandler); // OAuth/API routes (highest priority)
+app.route("/", createMcpRoutes(mcpHandlers)); // MCP endpoints
+app.route("/", webhookRoutes); // POST /webhook/hevy (notification-only)
+app.route("/", utilityRoutes); // Health, home, etc.
 
 // 404 handler
 app.notFound((c) => {
