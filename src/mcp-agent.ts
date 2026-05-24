@@ -9,15 +9,20 @@ import {
 	UpdateRoutineSchema,
 	CreateExerciseTemplateSchema,
 	CreateRoutineFolderSchema,
+	CreateBodyMeasurementSchema,
+	UpdateBodyMeasurementSchema,
+	BODY_MEASUREMENT_API_FIELDS,
 	transformWorkoutToAPI,
 	transformRoutineToAPI,
 	transformExerciseTemplateToAPI,
 	transformRoutineFolderToAPI,
+	transformBodyMeasurementToAPI,
 } from "./lib/schemas.js";
 import {
 	ValidationError,
 	validatePagination,
 	validateISO8601Date,
+	validateCalendarDate,
 	validateWorkoutData,
 	validateRoutineData,
 	validateExerciseTemplate,
@@ -42,7 +47,7 @@ interface Env {
 export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
 		name: "Hevy API",
-		version: "3.1.0",
+		version: "3.2.0",
 		description: "Multi-user remote MCP server for Hevy fitness tracking API with OAuth authentication",
 	});
 
@@ -658,6 +663,183 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 								type: "text",
 								text: `Folder ID: ${folder.id}\nIndex: ${folder.index}`,
 							},
+						],
+					};
+				} catch (error) {
+					return handleError(error);
+				}
+			}
+		);
+
+		// ============================================
+		// BODY MEASUREMENTS
+		// ============================================
+
+		// Tolerate both flat `{date, weight_kg, ...}` and wrapped `{body_measurement: {...}}`
+		// response shapes (other Hevy endpoints use the wrapped form, e.g. get_routine).
+		const unwrapMeasurement = (raw: any): any => {
+			if (raw && typeof raw === "object" && "body_measurement" in raw && raw.body_measurement && typeof raw.body_measurement === "object") {
+				return raw.body_measurement;
+			}
+			return raw;
+		};
+
+		this.server.tool(
+			"get_body_measurements",
+			{
+				page: z.number().optional().describe("Page number (Must be 1 or greater)").default(1),
+				page_size: z.number().optional().describe("Number of items per page (Max 10)").default(10),
+			},
+			async ({ page, page_size }) => {
+				try {
+					validatePagination(page, page_size, PAGINATION_LIMITS.BODY_MEASUREMENTS);
+
+					const result = await this.client.getBodyMeasurements({ page, pageSize: page_size });
+					const measurements = result?.body_measurements || [];
+
+					const summary = measurements.map((m: any, i: number) => {
+						const parts: string[] = [m.date];
+						if (m.weight_kg != null) parts.push(`${m.weight_kg}kg`);
+						if (m.fat_percent != null) parts.push(`${m.fat_percent}% bf`);
+						if (m.lean_mass_kg != null) parts.push(`${m.lean_mass_kg}kg lean`);
+						return `${i + 1}. ${parts.join(" · ")}`;
+					}).join("\n") || "No body measurements found";
+
+					const pageInfo = result?.page != null && result?.page_count != null
+						? ` (page ${result.page} of ${result.page_count})`
+						: "";
+
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Retrieved ${measurements.length} body measurements${pageInfo}`,
+							},
+							{ type: "text", text: summary },
+							{ type: "text", text: `\n\nFull data:\n${JSON.stringify(measurements, null, 2)}` },
+						],
+					};
+				} catch (error) {
+					return handleError(error);
+				}
+			}
+		);
+
+		this.server.tool(
+			"get_body_measurement",
+			{
+				date: z.string().describe("Date of the measurement in YYYY-MM-DD format"),
+			},
+			async ({ date }) => {
+				try {
+					validateCalendarDate(date, "date");
+
+					const measurement = unwrapMeasurement(await this.client.getBodyMeasurement(date));
+					const dateTxt = measurement?.date ?? date;
+					const weightTxt = measurement?.weight_kg != null ? `${measurement.weight_kg}kg` : "no weight recorded";
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Body measurement for ${dateTxt}: ${weightTxt}`,
+							},
+							{ type: "text", text: JSON.stringify(measurement, null, 2) },
+						],
+					};
+				} catch (error) {
+					return handleError(error);
+				}
+			}
+		);
+
+		this.server.tool(
+			"create_body_measurement",
+			CreateBodyMeasurementSchema.shape,
+			async (args) => {
+				try {
+					validateCalendarDate(args.date, "date");
+
+					// Build the API body via the allowlist transform so MCP-only fields can't
+					// leak to Hevy and null values are preserved as explicit nulls.
+					const body = transformBodyMeasurementToAPI(args, { includeDate: args.date });
+
+					const result = await this.client.createBodyMeasurement(body);
+					const weightTxt = args.weight_kg != null ? ` (${args.weight_kg}kg)` : "";
+					return {
+						content: [
+							{
+								type: "text",
+								text: `✓ Created body measurement for ${args.date}${weightTxt}`,
+							},
+							{ type: "text", text: JSON.stringify(result, null, 2) },
+						],
+					};
+				} catch (error) {
+					return handleError(error);
+				}
+			}
+		);
+
+		this.server.tool(
+			"update_body_measurement",
+			{
+				date: z.string().describe("Date of the measurement to update (YYYY-MM-DD)"),
+				...UpdateBodyMeasurementSchema.shape,
+			},
+			async (args) => {
+				try {
+					const { date, ...rawFields } = args;
+					validateCalendarDate(date, "date");
+
+					// Allowlist-filter the caller's fields so unknown keys can't leak to PUT.
+					// `undefined` means "preserve existing"; `null` means "explicitly clear".
+					const callerFields: Record<string, unknown> = {};
+					for (const key of BODY_MEASUREMENT_API_FIELDS) {
+						const v = (rawFields as Record<string, unknown>)[key];
+						if (v !== undefined) callerFields[key] = v;
+					}
+
+					if (Object.keys(callerFields).length === 0) {
+						throw new ValidationError(
+							"At least one measurement field must be specified to update (e.g., weight_kg, fat_percent)."
+						);
+					}
+
+					// Fetch existing for merge. PUT semantics on /v1/body_measurements/{date}
+					// are full-overwrite, so we read first to preserve untouched fields.
+					let hasExisting = false;
+					const existingFiltered: Record<string, unknown> = {};
+					try {
+						const existing = unwrapMeasurement(await this.client.getBodyMeasurement(date));
+						if (existing && typeof existing === "object") {
+							hasExisting = true;
+							for (const key of BODY_MEASUREMENT_API_FIELDS) {
+								if (key in existing) existingFiltered[key] = existing[key];
+							}
+						}
+					} catch (e: any) {
+						if (e?.status !== 404) throw e;
+						// 404: no record for this date — fall through, surface a clear error below.
+					}
+
+					if (!hasExisting) {
+						throw new ValidationError(
+							`No body measurement exists for ${date}. Use create_body_measurement instead.`
+						);
+					}
+
+					// Merge: caller's fields override existing for keys they specified.
+					const merged: Record<string, unknown> = { ...existingFiltered, ...callerFields };
+
+					const result = await this.client.updateBodyMeasurement(date, merged);
+					const weightTxt = callerFields.weight_kg != null ? ` (weight: ${callerFields.weight_kg}kg)` : "";
+					return {
+						content: [
+							{
+								type: "text",
+								text: `✓ Updated body measurement for ${date}${weightTxt}`,
+							},
+							{ type: "text", text: JSON.stringify(result, null, 2) },
 						],
 					};
 				} catch (error) {

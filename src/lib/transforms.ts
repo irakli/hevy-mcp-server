@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 /**
  * Validation errors with detailed messages
  */
@@ -383,7 +381,41 @@ export const PAGINATION_LIMITS = {
 	ROUTINE_FOLDERS: 10,
 	WORKOUT_EVENTS: 10,
 	EXERCISE_TEMPLATES: 100,
+	BODY_MEASUREMENTS: 10,
 } as const;
+
+/**
+ * Validates a calendar-date string in strict YYYY-MM-DD format.
+ * Used for body_measurements endpoints where the path parameter is a date.
+ * @param dateString - The date string to validate
+ * @param fieldName - Name of the field (for error messages)
+ * @throws ValidationError if the date format is invalid or the date is impossible
+ */
+export function validateCalendarDate(
+	dateString: string,
+	fieldName: string
+): void {
+	const pattern = /^\d{4}-\d{2}-\d{2}$/;
+
+	if (!pattern.test(dateString)) {
+		throw new ValidationError(
+			`${fieldName} must be in YYYY-MM-DD format (e.g., 2026-05-24), got ${JSON.stringify(dateString)}`
+		);
+	}
+
+	const [y, m, d] = dateString.split("-").map(Number);
+	const date = new Date(Date.UTC(y, m - 1, d));
+	if (
+		Number.isNaN(date.getTime()) ||
+		date.getUTCFullYear() !== y ||
+		date.getUTCMonth() !== m - 1 ||
+		date.getUTCDate() !== d
+	) {
+		throw new ValidationError(
+			`${fieldName} is not a valid calendar date: ${dateString}`
+		);
+	}
+}
 
 /**
  * Creates validated pagination parameters with proper limits

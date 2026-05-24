@@ -22,6 +22,7 @@ const STATUS_CODE_MESSAGES: Record<number, string> = {
 	401: "Unauthorized - Invalid API key",
 	403: "Limit exceeded or unauthorized",
 	404: "Resource not found",
+	409: "Conflict — a record already exists",
 	429: "Rate limit exceeded",
 	500: "Hevy API error",
 	502: "Hevy API is temporarily unavailable",
@@ -127,6 +128,13 @@ export function formatHevyApiError(error: HevyApiError): McpToolResponse {
 			parts.push("  - Verify the resource ID exists");
 			parts.push("  - Check for typos in the ID");
 			parts.push("  - Use list endpoints (e.g., get_workouts) to find valid IDs");
+			parts.push("  - For body_measurements: call create_body_measurement first, or check the date is YYYY-MM-DD");
+			break;
+
+		case 409:
+			parts.push("  - A record already exists for this key (e.g., a body_measurement for this date)");
+			parts.push("  - For body_measurements: call update_body_measurement instead of create_body_measurement");
+			parts.push("  - To start fresh, fetch the existing record first and decide whether to overwrite");
 			break;
 
 		case 429:

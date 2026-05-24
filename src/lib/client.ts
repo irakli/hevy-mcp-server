@@ -270,4 +270,43 @@ export class HevyClient {
   async createExerciseTemplate(exercise: any): Promise<any> {
     return this.post<any>('/v1/exercise_templates', exercise);
   }
+
+  // ============================================
+  // BODY MEASUREMENTS
+  // ============================================
+
+  /**
+   * Get a paginated list of body measurements
+   */
+  async getBodyMeasurements(options?: { page?: number; pageSize?: number }): Promise<any> {
+    return this.get<any>('/v1/body_measurements', options as Record<string, string | number | boolean | undefined>);
+  }
+
+  /**
+   * Get a single body measurement by date (YYYY-MM-DD).
+   * The date is URL-encoded defensively, but the MCP tool layer should
+   * validate the format with validateCalendarDate before calling.
+   */
+  async getBodyMeasurement(date: string): Promise<any> {
+    return this.get<any>(`/v1/body_measurements/${encodeURIComponent(date)}`);
+  }
+
+  /**
+   * Create a body measurement. Body shape is the BodyMeasurement object directly
+   * (no wrapper). Returns 409 if a measurement already exists for the given date.
+   */
+  async createBodyMeasurement(measurement: any): Promise<any> {
+    return this.post<any>('/v1/body_measurements', measurement);
+  }
+
+  /**
+   * Update a body measurement for a date (YYYY-MM-DD). API semantics are full
+   * overwrite — omitted fields become null. Callers wanting merge semantics
+   * should fetch existing first and merge before calling this.
+   * The date is URL-encoded defensively (date format validation happens
+   * at the MCP tool layer).
+   */
+  async updateBodyMeasurement(date: string, measurement: any): Promise<any> {
+    return this.put<any>(`/v1/body_measurements/${encodeURIComponent(date)}`, measurement);
+  }
 }

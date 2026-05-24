@@ -539,10 +539,10 @@ export function transformExerciseTemplateToAPI(template: CreateExerciseTemplate)
 
 /**
  * Transform routine folder data to API format (wraps in routine_folder object)
- * 
+ *
  * @param folder - Routine folder data in snake_case format
  * @returns Routine folder data formatted for the Hevy API
- * 
+ *
  * @example
  * ```typescript
  * const folder = {
@@ -558,4 +558,86 @@ export function transformRoutineFolderToAPI(folder: CreateRoutineFolder) {
 			title: folder.title,
 		},
 	};
+}
+
+// ============================================
+// BODY MEASUREMENT SCHEMAS (snake_case for MCP interface)
+// ============================================
+
+// Field names mirror the Hevy API verbatim. Some include a `_cm` suffix
+// (neck_cm, chest_cm, ...) and some don't (abdomen, waist, hips, left_thigh, ...).
+// Don't normalize — pass through as the API spells them.
+const BodyMeasurementFieldsSchema = z.object({
+	weight_kg: z.number().nonnegative().optional().nullable().describe("Body weight in kilograms"),
+	lean_mass_kg: z.number().nonnegative().optional().nullable().describe("Lean mass in kilograms"),
+	fat_percent: z.number().min(0).max(100).optional().nullable().describe("Body fat percentage (0-100)"),
+	neck_cm: z.number().nonnegative().optional().nullable().describe("Neck circumference in cm"),
+	shoulder_cm: z.number().nonnegative().optional().nullable().describe("Shoulder circumference in cm"),
+	chest_cm: z.number().nonnegative().optional().nullable().describe("Chest circumference in cm"),
+	left_bicep_cm: z.number().nonnegative().optional().nullable().describe("Left bicep circumference in cm"),
+	right_bicep_cm: z.number().nonnegative().optional().nullable().describe("Right bicep circumference in cm"),
+	left_forearm_cm: z.number().nonnegative().optional().nullable().describe("Left forearm circumference in cm"),
+	right_forearm_cm: z.number().nonnegative().optional().nullable().describe("Right forearm circumference in cm"),
+	abdomen: z.number().nonnegative().optional().nullable().describe("Abdomen circumference in cm"),
+	waist: z.number().nonnegative().optional().nullable().describe("Waist circumference in cm"),
+	hips: z.number().nonnegative().optional().nullable().describe("Hips circumference in cm"),
+	left_thigh: z.number().nonnegative().optional().nullable().describe("Left thigh circumference in cm"),
+	right_thigh: z.number().nonnegative().optional().nullable().describe("Right thigh circumference in cm"),
+	left_calf: z.number().nonnegative().optional().nullable().describe("Left calf circumference in cm"),
+	right_calf: z.number().nonnegative().optional().nullable().describe("Right calf circumference in cm"),
+});
+
+/**
+ * Schema for creating a body measurement (POST /v1/body_measurements).
+ * `date` is required; every measurement field is optional.
+ * Returns 409 if a measurement already exists for that date — use update_body_measurement instead.
+ */
+export const CreateBodyMeasurementSchema = z.object({
+	date: z.string().describe("Date of the measurement in YYYY-MM-DD format"),
+	...BodyMeasurementFieldsSchema.shape,
+});
+export type CreateBodyMeasurement = z.infer<typeof CreateBodyMeasurementSchema>;
+
+/**
+ * Schema for updating a body measurement (PUT /v1/body_measurements/{date}).
+ * `date` is in the URL path, not the body. The tool handler does a
+ * get-then-merge-then-put so callers can update individual fields without
+ * nulling the others (raw PUT semantics are full-overwrite).
+ *
+ * Pass `null` for a field to explicitly clear it; omit a field to preserve
+ * its existing value.
+ */
+export const UpdateBodyMeasurementSchema = BodyMeasurementFieldsSchema;
+export type UpdateBodyMeasurement = z.infer<typeof UpdateBodyMeasurementSchema>;
+
+/**
+ * The canonical allowlist of body-measurement field names accepted by the
+ * Hevy POST/PUT body. Used by the MCP tool handlers to filter both the
+ * caller's input and the GET response (in the merge path) so server-only
+ * fields like id/created_at can't leak into a write request.
+ */
+export const BODY_MEASUREMENT_API_FIELDS = Object.keys(
+	BodyMeasurementFieldsSchema.shape
+) as Array<keyof typeof BodyMeasurementFieldsSchema.shape>;
+
+/**
+ * Transform body-measurement data to API format.
+ * - Allowlists to known measurement fields (drops id, created_at, etc.).
+ * - Drops undefined values (preserve existing on PUT; absent on POST).
+ * - Preserves explicit `null` (clears the field on PUT; absent on POST).
+ * - Adds `date` only when provided (POST), never for PUT body.
+ */
+export function transformBodyMeasurementToAPI(
+	fields: Record<string, unknown>,
+	options: { includeDate?: string } = {}
+): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const key of BODY_MEASUREMENT_API_FIELDS) {
+		const v = fields[key];
+		if (v !== undefined) out[key] = v;
+	}
+	if (options.includeDate !== undefined) {
+		out.date = options.includeDate;
+	}
+	return out;
 }
