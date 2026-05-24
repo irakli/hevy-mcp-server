@@ -328,9 +328,9 @@ app.get("/callback", async (c) => {
 			baseUrl,
 		};
 
-		// Store session in KV (expires in 30 days)
+		// Store session in KV (1 year)
 		await c.env.OAUTH_KV.put(`session:${sessionToken}`, JSON.stringify(sessionData), {
-			expirationTtl: 30 * 24 * 60 * 60,
+			expirationTtl: 365 * 24 * 60 * 60,
 		});
 
 		// Clean up state
@@ -360,7 +360,7 @@ app.get("/callback", async (c) => {
 			const response = c.redirect(redirectUrl.toString());
 			response.headers.set(
 				"Set-Cookie",
-				`session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`
+				`session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${365 * 24 * 60 * 60}`
 			);
 			return response;
 		}
@@ -379,7 +379,7 @@ app.get("/callback", async (c) => {
 		const response = c.html(html);
 		response.headers.set(
 			"Set-Cookie",
-			`session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`
+			`session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${365 * 24 * 60 * 60}`
 		);
 		return response;
 	} catch (error) {
@@ -472,7 +472,7 @@ app.post("/token", async (c) => {
 		return c.json({
 			access_token: accessToken,
 			token_type: "Bearer",
-			expires_in: 30 * 24 * 60 * 60, // 30 days
+			expires_in: 365 * 24 * 60 * 60, // 1 year
 			scope: "mcp",
 		});
 	} catch (error) {

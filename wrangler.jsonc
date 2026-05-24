@@ -10,9 +10,7 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-	"limits": {
-		"cpu_ms": 50
-	},
+	// "limits": { "cpu_ms": 50 },  // Restore on Workers Paid plan; free plan caps CPU at 10 ms.
 	"migrations": [
 		{
 			"new_sqlite_classes": [
@@ -39,22 +37,13 @@
 	"kv_namespaces": [
 		{
 			"binding": "OAUTH_KV",
-			"id": "c449b150e27b4ed6a7f958e81495da16"
-		}
-	],
-	/**
-	 * Production Routes
-	 * Custom domain configuration for production deployment
-	 */
-	"routes": [
-		{
-			"pattern": "hevy.tomt.it",
-			"custom_domain": true
+			"id": "cf4b31bd57bd458d9048edb37619e60f"
 		}
 	],
 	/**
 	 * Development Environment
-	 * Overrides for local development to avoid Host header rewriting
+	 * Separate KV namespace so `wrangler dev --env dev` does not bind production data.
+	 * package.json `dev` and `start` scripts pass `--env dev`.
 	 */
 	"env": {
 		"dev": {
@@ -70,10 +59,9 @@
 			"kv_namespaces": [
 				{
 					"binding": "OAUTH_KV",
-					"id": "b58f63e9889b4f87b6ad153501e1e165"
+					"id": "3f4cdaaecc4a491b967f38918d56ec3c"
 				}
 			]
-			// No routes for dev - prevents Host header issues in local development
 		}
 	}
 	/**
