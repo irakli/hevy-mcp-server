@@ -72,11 +72,14 @@ export async function classify(
 		const workingSets = sets.filter((s) => s.type !== "warmup");
 		if (workingSets.length === 0) continue;
 
-		// RPE classification (only if RPE was logged on any set)
-		const rpeSets = workingSets.filter((s) => typeof s.rpe === "number");
-		if (rpeSets.length > 0) {
+		// RPE classification (only if RPE was logged on any set).
+		// Local name distinct from the `hasRpeSets` helper below to
+		// avoid shadowing.
+		const rpeLoggedSets = workingSets.filter((s) => typeof s.rpe === "number");
+		if (rpeLoggedSets.length > 0) {
 			const avgRpe =
-				rpeSets.reduce((sum, s) => sum + (s.rpe as number), 0) / rpeSets.length;
+				rpeLoggedSets.reduce((sum, s) => sum + (s.rpe as number), 0) /
+				rpeLoggedSets.length;
 			if (avgRpe >= rpeTarget.max + 2 && !highRpe) {
 				highRpe = {
 					lift,
@@ -160,12 +163,12 @@ export async function classify(
 	return {
 		classification: "normal",
 		title: "Session logged",
-		message: `✅ ${workout.title ?? pattern} logged. ${rpeSets(workout) ? "On target." : "(No RPE logged — daily refinement will use rep-completion fallback.)"}`,
+		message: `✅ ${workout.title ?? pattern} logged. ${hasRpeSets(workout) ? "On target." : "(No RPE logged — daily refinement will use rep-completion fallback.)"}`,
 		tags: ["white_check_mark"],
 	};
 }
 
-function rpeSets(workout: HevyWorkout): boolean {
+function hasRpeSets(workout: HevyWorkout): boolean {
 	return (workout.exercises ?? []).some((ex) =>
 		(ex.sets ?? []).some((s) => typeof s.rpe === "number"),
 	);

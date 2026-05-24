@@ -26,11 +26,38 @@ interface Env {
 
 const app = new Hono<{ Bindings: Env }>();
 
+/**
+ * Constant-time string equality. Prevents timing-attack leakage of
+ * the bearer token via response-latency analysis. Returns false fast
+ * only on length mismatch (length is not secret); on equal-length
+ * inputs, always compares every byte.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+	if (a.length !== b.length) return false;
+	let diff = 0;
+	for (let i = 0; i < a.length; i++) {
+		diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+	}
+	return diff === 0;
+}
+
 app.post("/webhook/hevy", async (c) => {
-	// 1. Verify bearer token
-	const auth = c.req.header("Authorization");
-	const expected = `Bearer ${c.env.HEVY_WEBHOOK_TOKEN}`;
-	if (auth !== expected) {
+	// 1. Verify bearer token.
+	// Hevy's webhook config UI lets the user paste the entire
+	// Authorization header value verbatim (e.g., "Bearer abc123" OR
+	// just "abc123"). Accept both so a misconfigured prefix doesn't
+	// lock us out. Reject hard if the server-side token is empty —
+	// otherwise an unset/blank secret would silently accept any
+	// caller.
+	const token = c.env.HEVY_WEBHOOK_TOKEN;
+	if (!token || token.length < 16) {
+		console.error("HEVY_WEBHOOK_TOKEN missing or too short — refusing all webhook traffic");
+		return c.json({ error: "server_misconfigured" }, 500);
+	}
+	const auth = c.req.header("Authorization") ?? "";
+	const okBare = constantTimeEqual(auth, token);
+	const okBearer = constantTimeEqual(auth, `Bearer ${token}`);
+	if (!okBare && !okBearer) {
 		return c.json({ error: "unauthorized" }, 401);
 	}
 

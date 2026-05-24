@@ -34,10 +34,14 @@ interface Env {
 // Create Hono app for OAuth routes
 const app = new Hono<{ Bindings: Env }>();
 
-// Add CORS middleware for all routes
+// Add CORS middleware for all routes.
+// /webhook/* paths are server-to-server only; they opt out of CORS
+// so their response bodies can't be probed cross-origin.
 app.use("*", async (c, next) => {
-	// Handle OPTIONS preflight requests
-	if (c.req.method === "OPTIONS") {
+	const isWebhook = c.req.path.startsWith("/webhook/");
+
+	// Handle OPTIONS preflight requests (browser routes only)
+	if (c.req.method === "OPTIONS" && !isWebhook) {
 		return new Response(null, {
 			status: 204,
 			headers: {
@@ -51,10 +55,12 @@ app.use("*", async (c, next) => {
 
 	await next();
 
-	// Add CORS headers to all responses
-	c.res.headers.set("Access-Control-Allow-Origin", "*");
-	c.res.headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-	c.res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+	// Add CORS headers to all NON-webhook responses
+	if (!isWebhook) {
+		c.res.headers.set("Access-Control-Allow-Origin", "*");
+		c.res.headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+		c.res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+	}
 });
 
 /**

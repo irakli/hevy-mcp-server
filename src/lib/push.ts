@@ -33,7 +33,11 @@ export async function pushNotification(opts: PushOptions): Promise<void> {
 		"Content-Type": "text/plain; charset=utf-8",
 	};
 	if (opts.title) headers["Title"] = opts.title;
-	if (opts.priority) headers["Priority"] = String(opts.priority);
+	// Use !== undefined rather than truthy check so a priority of 0
+	// (if ever passed) doesn't silently drop. ntfy.sh range is 1-5,
+	// so 0 is out of spec anyway, but the defensive check costs
+	// nothing.
+	if (opts.priority !== undefined) headers["Priority"] = String(opts.priority);
 	if (opts.tags && opts.tags.length > 0) headers["Tags"] = opts.tags.join(",");
 	if (opts.click) headers["Click"] = opts.click;
 

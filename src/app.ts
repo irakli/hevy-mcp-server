@@ -31,10 +31,15 @@ interface Variables {
 // Create main Hono app with proper TypeScript types
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// Global CORS middleware
+// Global CORS middleware.
+// /webhook/* endpoints are server-to-server only (called by Hevy's
+// backend, not by browsers) — they explicitly opt out of CORS so
+// their responses can't be probed cross-origin by a third-party page.
 app.use("*", async (c, next) => {
-	// Handle OPTIONS preflight requests
-	if (c.req.method === "OPTIONS") {
+	const isWebhook = c.req.path.startsWith("/webhook/");
+
+	// Handle OPTIONS preflight requests (browser routes only)
+	if (c.req.method === "OPTIONS" && !isWebhook) {
 		return new Response(null, {
 			status: 204,
 			headers: {
@@ -48,16 +53,18 @@ app.use("*", async (c, next) => {
 
 	await next();
 
-	// Add CORS headers to all responses
-	c.res.headers.set("Access-Control-Allow-Origin", "*");
-	c.res.headers.set(
-		"Access-Control-Allow-Methods",
-		"GET, POST, DELETE, OPTIONS",
-	);
-	c.res.headers.set(
-		"Access-Control-Allow-Headers",
-		"Content-Type, Authorization",
-	);
+	// Add CORS headers to all NON-webhook responses
+	if (!isWebhook) {
+		c.res.headers.set("Access-Control-Allow-Origin", "*");
+		c.res.headers.set(
+			"Access-Control-Allow-Methods",
+			"GET, POST, DELETE, OPTIONS",
+		);
+		c.res.headers.set(
+			"Access-Control-Allow-Headers",
+			"Content-Type, Authorization",
+		);
+	}
 });
 
 // Error handling middleware
