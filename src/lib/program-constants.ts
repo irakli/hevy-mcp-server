@@ -11,8 +11,9 @@
  * - TARGET_RPE_FOR_WEEK: target RPE band per week
  */
 
-// First training day of Cycle 1. Update at cycle boundaries.
-export const CYCLE_START_DATE = new Date("2026-05-25T00:00:00Z");
+// First training day of Cycle 2. Update at cycle boundaries.
+// Cycle 1 ran 2026-05-25 to 2026-08-16.
+export const CYCLE_START_DATE = new Date("2026-08-17T00:00:00Z");
 
 // 0=Sun, 1=Mon, ..., 6=Sat (JavaScript getUTCDay convention)
 export type DayPattern = "Upper 1" | "Lower 1" | "Upper 2" | "Lower 2" | "rest";
