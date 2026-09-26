@@ -29,6 +29,15 @@ import {
 	PAGINATION_LIMITS,
 } from "./lib/transforms.js";
 import { handleError } from "./lib/errors.js";
+import {
+	ROUTINE_SCAN_PAGE_SIZE,
+	formatRoutineDetails,
+	formatRoutineScanHeader,
+	formatWorkoutSummaries,
+	hasRoutineFilter,
+	scanRoutines,
+	summarizeWorkout,
+} from "./lib/routine-query.js";
 import type { Props } from "./utils.js";
 import { getUserApiKey } from "./lib/key-storage.js";
 
@@ -93,16 +102,47 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 		this.server.tool(
 			"get_workouts",
+			"List workouts, newest first. Pass summary: true when you only need dates, titles, or " +
+				"a count (for example resolving this week's sessions): it returns id, title, " +
+				"start_time, end_time, and exercise count per workout instead of every set, which " +
+				"is roughly 100x smaller. Use get_workout or get_exercise_history for set detail.",
 			{
 				page: z.number().optional().describe("Page number (Must be 1 or greater)").default(1),
 				page_size: z.number().optional().describe("Number of items per page (Max 10)").default(10),
+				summary: z
+					.boolean()
+					.optional()
+					.describe(
+						"If true, return only id, title, start_time, end_time, and exercise count per workout (no exercises or sets). Default false.",
+					)
+					.default(false),
 			},
-			async ({ page, page_size }) => {
+			async ({ page, page_size, summary }) => {
 				try {
 					// Validate pagination parameters
 					validatePagination(page, page_size, PAGINATION_LIMITS.WORKOUTS);
 
 					const workouts = await this.client.getWorkouts({ page, pageSize: page_size });
+
+					if (summary) {
+						const summaries = (workouts.workouts ?? []).map(summarizeWorkout);
+						return {
+							content: [
+								{
+									type: "text",
+									text: `Retrieved ${summaries.length} workouts (page ${workouts.page} of ${workouts.page_count}, summary)`,
+								},
+								{
+									type: "text",
+									text: formatWorkoutSummaries(summaries),
+								},
+								{
+									type: "text",
+									text: `\n\nSummary data:\n${JSON.stringify(summaries, null, 2)}`,
+								},
+							],
+						};
+					}
 
 					const workoutDetails = workouts.workouts?.map((workout: any, index: number) => {
 						return `Workout ${index + 1}: ${workout.title || 'Untitled'}\n  ID: ${workout.id}\n  Date: ${workout.start_time}`;
@@ -297,21 +337,68 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 		this.server.tool(
 			"get_routines",
+			"List routines. Hevy returns the OLDEST routines first, so to find a given week's " +
+				"routines pass folder_id (from get_routine_folders), optionally with title_contains " +
+				"(e.g. \"Upper 1\"): the server scans every page and returns only the matches, in " +
+				"full, in one call. Without a filter this is a plain paged listing.",
 			{
-				page: z.number().optional().describe("Page number (Must be 1 or greater)").default(1),
-				page_size: z.number().optional().describe("Number of items per page (Max 10)").default(5),
+				page: z
+					.number()
+					.optional()
+					.describe("Page number (Must be 1 or greater). Ignored when folder_id or title_contains is set.")
+					.default(1),
+				page_size: z
+					.number()
+					.optional()
+					.describe("Number of items per page (Max 10). Ignored when folder_id or title_contains is set.")
+					.default(5),
+				folder_id: z
+					.number()
+					.int()
+					.optional()
+					.describe(
+						"Return only routines in this routine folder. The server scans all pages; page and page_size are ignored.",
+					),
+				title_contains: z
+					.string()
+					.min(1)
+					.optional()
+					.describe(
+						"Return only routines whose title contains this text (case-sensitive substring). The server scans all pages; page and page_size are ignored. Combines with folder_id (both must match).",
+					),
 			},
-			async ({ page, page_size }) => {
+			async ({ page, page_size, folder_id, title_contains }) => {
 				try {
+					const filter = { folderId: folder_id, titleContains: title_contains };
+					if (hasRoutineFilter(filter)) {
+						const result = await scanRoutines(
+							(p) => this.client.getRoutines({ page: p, pageSize: ROUTINE_SCAN_PAGE_SIZE }),
+							filter,
+						);
+						return {
+							content: [
+								{
+									type: "text",
+									text: formatRoutineScanHeader(result, filter),
+								},
+								{
+									type: "text",
+									text: formatRoutineDetails(result.routines),
+								},
+								{
+									type: "text",
+									text: `\n\nFull data:\n${JSON.stringify(result.routines, null, 2)}`,
+								},
+							],
+						};
+					}
+
 					// Validate pagination parameters
 					validatePagination(page, page_size, PAGINATION_LIMITS.ROUTINES);
 
 					const routines = await this.client.getRoutines({ page, pageSize: page_size });
 
-					const routineDetails = routines.routines?.map((routine: any, index: number) => {
-						const exerciseCount = routine.exercises?.length || 0;
-						return `Routine ${index + 1}: ${routine.title}\n  Exercises: ${exerciseCount}\n  ID: ${routine.id}`;
-					}).join('\n') || 'No routines found';
+					const routineDetails = formatRoutineDetails(routines.routines);
 
 					return {
 						content: [

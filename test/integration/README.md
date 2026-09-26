@@ -20,7 +20,7 @@ Since MCP tools run as Cloudflare Workers Durable Objects, we test the underlyin
 ## Test Coverage (50 tests)
 
 ### Workout Tools (20 tests)
-- ✅ `get_workouts` - Pagination, empty lists, validation errors, API errors
+- ✅ `get_workouts` - Pagination, empty lists, validation errors, API errors, summary mode
 - ✅ `get_workout` - Single workout retrieval, 404 handling
 - ✅ `create_workout` - Full end-to-end flow with validation, date checks, RPE validation, negative value checks
 - ✅ `update_workout` - Update flow, 404 handling
@@ -28,7 +28,7 @@ Since MCP tools run as Cloudflare Workers Durable Objects, we test the underlyin
 - ✅ `get_workout_events` - Events retrieval, date validation, empty lists
 
 ### Routine Tools (10 tests)
-- ✅ `get_routines` - List retrieval, empty lists
+- ✅ `get_routines` - List retrieval, empty lists, multi-page folder/title filtering, filter API errors (pure scan logic in `test/lib/routine-query.test.ts`)
 - ✅ `get_routine` - Single routine retrieval, 404 handling
 - ✅ `create_routine` - Full end-to-end flow, title validation, rep range validation
 - ✅ `update_routine` - Update flow, 404 handling

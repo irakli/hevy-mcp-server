@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { HevyClient } from "../../src/lib/client.js";
 import { mockFetchSuccess, mockFetchError } from "../setup.js";
 import {
@@ -21,6 +21,14 @@ import {
 	transformExerciseTemplateToAPI,
 	transformRoutineFolderToAPI,
 } from "../../src/lib/schemas.js";
+import {
+	ROUTINE_SCAN_PAGE_SIZE,
+	formatRoutineDetails,
+	formatRoutineScanHeader,
+	formatWorkoutSummaries,
+	scanRoutines,
+	summarizeWorkout,
+} from "../../src/lib/routine-query.js";
 
 /**
  * Integration tests for MCP tools
@@ -65,6 +73,28 @@ describe("MCP Tools Integration Tests", () => {
 
 			const workouts = await client.getWorkouts({});
 			expect(workouts.workouts).toEqual([]);
+		});
+
+		it("should reduce workouts to id/title/times/exercise count in summary mode", async () => {
+			mockFetchSuccess(mockWorkoutsList);
+
+			const workouts = await client.getWorkouts({ page: 1, pageSize: 10 });
+			const summaries = workouts.workouts.map(summarizeWorkout);
+
+			expect(summaries).toHaveLength(3);
+			for (const s of summaries) {
+				expect(Object.keys(s).sort()).toEqual(
+					["end_time", "exercise_count", "id", "start_time", "title"].sort(),
+				);
+			}
+			expect(summaries[0]).toEqual({
+				id: "workout-1",
+				title: "Push Day",
+				start_time: "2024-01-15T10:00:00Z",
+				end_time: "2024-01-15T11:00:00Z",
+				exercise_count: 0,
+			});
+			expect(formatWorkoutSummaries(summaries)).toContain("Workout 3: Leg Day\n  ID: workout-3");
 		});
 
 		it("should throw error for invalid pagination", async () => {
@@ -374,6 +404,80 @@ describe("MCP Tools Integration Tests", () => {
 			const routines = await client.getRoutines({});
 
 			expect(routines.routines).toEqual([]);
+		});
+
+		describe("with folder_id / title_contains filters", () => {
+			const pages = [
+				[
+					{ id: "c1-u1", title: "Upper 1 — Horizontal Emphasis", folder_id: 2923995, exercises: [] },
+					{ id: "c1-l1", title: "Lower 1 — Quad Emphasis", folder_id: 2923995, exercises: [] },
+				],
+				[
+					{ id: "w4-u2", title: "Upper 2 — Vertical Emphasis", folder_id: 3636987, exercises: [] },
+					{ id: "w5-sit", title: "Conditioning - SIT (Air Bike)", folder_id: 3695687, exercises: [{}, {}] },
+				],
+				[
+					{ id: "w5-u1", title: "Upper 1 — Horizontal Emphasis", folder_id: 3695687, exercises: [{}] },
+					{ id: "w5-l1", title: "Lower 1 — Quad Emphasis", folder_id: 3695687, exercises: [{}] },
+				],
+			];
+
+			beforeEach(() => {
+				(global.fetch as any).mockImplementation(async (url: string) => {
+					const page = Number(new URL(url).searchParams.get("page"));
+					return {
+						ok: true,
+						status: 200,
+						statusText: "OK",
+						headers: new Headers({ "Content-Type": "application/json" }),
+						json: async () => ({ page, page_count: pages.length, routines: pages[page - 1] ?? [] }),
+					};
+				});
+			});
+
+			afterEach(() => {
+				(global.fetch as any).mockReset();
+			});
+
+			const fetchPage = (p: number) =>
+				client.getRoutines({ page: p, pageSize: ROUTINE_SCAN_PAGE_SIZE });
+
+			it("scans every page at the max page size and returns only the folder's routines", async () => {
+				const result = await scanRoutines(fetchPage, { folderId: 3695687 });
+
+				expect(result.routines.map((r) => r.id)).toEqual(["w5-sit", "w5-u1", "w5-l1"]);
+				const urls = (global.fetch as any).mock.calls.map((c: any[]) => new URL(c[0]));
+				expect(urls.map((u: URL) => u.pathname)).toEqual(["/v1/routines", "/v1/routines", "/v1/routines"]);
+				expect(urls.map((u: URL) => u.searchParams.get("pageSize"))).toEqual(["10", "10", "10"]);
+				expect(urls.map((u: URL) => Number(u.searchParams.get("page"))).sort()).toEqual([1, 2, 3]);
+				expect(formatRoutineScanHeader(result, { folderId: 3695687 })).toBe(
+					"Found 3 routines matching folder_id=3695687 (scanned 3 of 3 pages)",
+				);
+			});
+
+			it("narrows to one session with folder_id + title_contains", async () => {
+				const result = await scanRoutines(fetchPage, { folderId: 3695687, titleContains: "Upper 1" });
+
+				expect(result.routines).toHaveLength(1);
+				expect(result.routines[0].id).toBe("w5-u1");
+				expect(formatRoutineDetails(result.routines)).toBe(
+					"Routine 1: Upper 1 — Horizontal Emphasis\n  Exercises: 1\n  ID: w5-u1",
+				);
+			});
+
+			it("surfaces an API error on any page through handleError", async () => {
+				(global.fetch as any).mockReset();
+				mockFetchSuccess({ page: 1, page_count: 2, routines: [] });
+				mockFetchError(429, "Too Many Requests");
+
+				try {
+					await scanRoutines(fetchPage, { folderId: 1 });
+					expect.fail("Should have thrown");
+				} catch (error) {
+					const result = handleError(error);
+					expect(result.isError).toBe(true);
+				}
+			});
 		});
 	});
 

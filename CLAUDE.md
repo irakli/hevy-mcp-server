@@ -23,8 +23,9 @@ The server provides comprehensive access to the Hevy API with 17 tools:
 ### Workouts
 
 #### `get_workouts`
-Get a paginated list of workouts with details.
-- **Parameters:** `page` (default: 1), `page_size` (default: 10, max: 10)
+Get a paginated list of workouts with details (newest first).
+- **Parameters:** `page` (default: 1), `page_size` (default: 10, max: 10), `summary` (boolean, default: false)
+- **Note:** `summary: true` returns only `id`, `title`, `start_time`, `end_time`, and `exercise_count` per workout (no exercises or sets), roughly 100x smaller. Prefer it for date/title scans.
 
 #### `get_workout`
 Get a single workout by ID with full details.
@@ -50,8 +51,9 @@ Get workout change events (updates/deletes) since a date for syncing.
 ### Routines
 
 #### `get_routines`
-Get a paginated list of workout routines.
-- **Parameters:** `page` (default: 1), `page_size` (default: 5, max: 10)
+Get a paginated list of workout routines (Hevy lists the oldest first).
+- **Parameters:** `page` (default: 1), `page_size` (default: 5, max: 10), `folder_id` (number, optional), `title_contains` (string, optional)
+- **Note:** When `folder_id` and/or `title_contains` (case-sensitive substring) is set, the server scans every page itself (page size 10, 3 in parallel) and returns only the matching routines in full; `page`/`page_size` are ignored. Scans are capped at 40 pages (Workers Free plan allows 50 subrequests per invocation); past that it keeps page 1 plus the newest pages and says which pages it skipped. Logic lives in `src/lib/routine-query.ts`.
 
 #### `get_routine`
 Get a single routine by ID with full exercise details.

@@ -11,9 +11,12 @@
  * - TARGET_RPE_FOR_WEEK: target RPE band per week
  */
 
-// First training day of Cycle 2. Update at cycle boundaries.
-// Cycle 1 ran 2026-05-25 to 2026-08-16.
-export const CYCLE_START_DATE = new Date("2026-08-17T00:00:00Z");
+// Week-1 Monday of Cycle 2. Update at cycle boundaries.
+// Cycle 1 ran 2026-05-25 to 2026-08-16. Cycle 2 first opened 2026-08-17;
+// the 2026-08-24 vacation week was skipped, so the start was shifted one
+// week to keep this arithmetic in step with the Hevy folder numbers.
+// Pausing a cycle = shifting this date (and 04's Start date) by 7 days.
+export const CYCLE_START_DATE = new Date("2026-08-24T00:00:00Z");
 
 // 0=Sun, 1=Mon, ..., 6=Sat (JavaScript getUTCDay convention)
 export type DayPattern = "Upper 1" | "Lower 1" | "Upper 2" | "Lower 2" | "rest";
@@ -50,8 +53,8 @@ export function targetRpeForWeek(weekN: number): RPETarget {
 /**
  * Computes the current week number (1-indexed) from CYCLE_START_DATE.
  * Returns 0 if today is before the cycle start; values >12 mean we've
- * passed the cycle end and need to begin Cycle 2 (constants must be
- * updated for the new cycle).
+ * passed the cycle end and need to begin the next cycle (constants must
+ * be updated for the new cycle).
  */
 export function currentWeekNumber(now: Date = new Date()): number {
 	const msPerDay = 1000 * 60 * 60 * 24;

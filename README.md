@@ -9,7 +9,7 @@ A Model Context Protocol (MCP) server that provides AI assistants with access to
 This MCP server provides comprehensive access to Hevy's fitness tracking capabilities:
 
 ### Workouts
-- **`get_workouts`** - Browse your workout history (paginated)
+- **`get_workouts`** - Browse your workout history (paginated; `summary: true` for ids, titles, and dates only)
 - **`get_workout`** - Get detailed information about a specific workout
 - **`create_workout`** - Log a new workout with exercises, sets, weights, and reps
 - **`update_workout`** - Update an existing workout
@@ -17,7 +17,7 @@ This MCP server provides comprehensive access to Hevy's fitness tracking capabil
 - **`get_workout_events`** - Get workout change events (updates/deletes) since a date for syncing
 
 ### Routines
-- **`get_routines`** - List your workout routines
+- **`get_routines`** - List your workout routines (paginated, or filtered server-side by `folder_id` / `title_contains`)
 - **`get_routine`** - Get details of a specific routine
 - **`create_routine`** - Create a new workout routine template
 - **`update_routine`** - Update an existing routine
