@@ -15,8 +15,10 @@
 // Cycle 1 ran 2026-05-25 to 2026-08-16. Cycle 2 first opened 2026-08-17;
 // the 2026-08-24 vacation week was skipped, so the start was shifted one
 // week to keep this arithmetic in step with the Hevy folder numbers.
+// Weeks 6-7 (2026-09-28 to 2026-10-11) were lost to illness, so the start
+// was shifted two more weeks and week 6 resumed on 2026-10-12.
 // Pausing a cycle = shifting this date (and 04's Start date) by 7 days.
-export const CYCLE_START_DATE = new Date("2026-08-24T00:00:00Z");
+export const CYCLE_START_DATE = new Date("2026-09-07T00:00:00Z");
 
 // 0=Sun, 1=Mon, ..., 6=Sat (JavaScript getUTCDay convention)
 export type DayPattern = "Upper 1" | "Lower 1" | "Upper 2" | "Lower 2" | "rest";
